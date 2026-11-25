@@ -1,19 +1,26 @@
+
 import { useState } from 'react';
-import { MapPin, Navigation, Radio, ShieldCheck, Siren } from 'lucide-react';
+import { Compass, MapPin, Navigation, Radio, ShieldCheck, Siren } from 'lucide-react';
 
 interface WelcomeViewProps {
   onSignIn: () => void;
+  onContinueAsGuest: () => void;
   authError: string | null;
   isSigningIn: boolean;
 }
 
-export function WelcomeView({ onSignIn, authError, isSigningIn }: WelcomeViewProps) {
+export function WelcomeView({
+  onSignIn,
+  onContinueAsGuest,
+  authError,
+  isSigningIn,
+}: WelcomeViewProps) {
   const [imgFailed, setImgFailed] = useState(false);
 
   return (
     <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 lg:py-16">
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
-        <div className="lg:col-span-6 flex flex-col justify-between bg-white border border-slate-200 rounded-xl p-8 lg:p-10">
+        <div className="lg:col-span-6 flex flex-col justify-between bg-white border border-slate-200 rounded-xl p-6 sm:p-8 lg:p-10">
           <div>
             <p className="text-xs font-medium tracking-wide text-teal-700 mb-3">
               Women’s Route Safety &amp; Emergency Dispatch
@@ -21,20 +28,39 @@ export function WelcomeView({ onSignIn, authError, isSigningIn }: WelcomeViewPro
             <h1 className="font-display text-3xl sm:text-4xl lg:text-[42px] font-bold tracking-tight text-slate-950 leading-[1.15] text-balance mb-5">
               Choose the safest route home, not just the shortest one.
             </h1>
-            <p className="text-base text-slate-600 leading-relaxed max-w-xl mb-8">
+            <p className="text-base text-slate-600 leading-relaxed max-w-xl mb-7">
               SafeHer analyzes every alternative corridor between your origin and destination—evaluating street lighting, active storefronts, CCTV coverage, nearby police posts, and community hazard reports in real time.
             </p>
 
-            <div className="flex flex-wrap items-center gap-4 mb-8">
+            <div className="flex flex-col gap-3 w-full sm:max-w-sm mb-5">
               <button
                 type="button"
                 onClick={onSignIn}
                 disabled={isSigningIn}
-                className="inline-flex items-center gap-2.5 px-6 py-3 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2"
+                className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-3 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2"
               >
                 <ShieldCheck className="w-4 h-4 shrink-0" />
                 <span>{isSigningIn ? 'Connecting Account...' : 'Sign in with Google to Start'}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={onContinueAsGuest}
+                disabled={isSigningIn}
+                className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-3 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-950 text-sm font-semibold border border-slate-900 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+              >
+                <Compass className="w-4 h-4 text-teal-700 shrink-0" />
+                <span>Continue as Guest</span>
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed mb-6">
+              <p className="font-semibold text-slate-900 mb-1">
+                Explore immediately without an account
+              </p>
+              <p>
+                Guest users can access route search, route safety scoring, interactive maps, and AI safety analysis. Emergency SOS alerts, live family sharing, and saved journey history require Google Sign-In.
+              </p>
             </div>
 
             {authError && (
@@ -62,7 +88,7 @@ export function WelcomeView({ onSignIn, authError, isSigningIn }: WelcomeViewPro
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">Live Family Journey Sharing</h2>
                 <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                  Share an encrypted tracking code with trusted family contacts for real-time ETA monitoring.
+                  Share a live tracking code with trusted family contacts for real-time ETA monitoring.
                 </p>
               </div>
             </div>
@@ -111,7 +137,7 @@ export function WelcomeView({ onSignIn, authError, isSigningIn }: WelcomeViewPro
               Powered by OpenStreetMap · OSRM · Cloud Firestore
             </p>
             <p className="text-sm sm:text-base text-slate-100 leading-relaxed max-w-lg">
-              Sign in with your verified Google account to analyze corridors, store private emergency contacts, share live journeys, and access emergency assistance.
+              Sign in with Google for emergency SOS alerts, live family sharing, and saved journey history—or continue as a guest to search routes and compare corridor safety indicators.
             </p>
           </div>
         </div>
