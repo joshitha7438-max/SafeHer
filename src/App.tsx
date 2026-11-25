@@ -1,3 +1,4 @@
+
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { LogOut } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -36,6 +37,7 @@ import {
 
 function AppShell() {
   const [user, setUser] = useState<User | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -69,20 +71,47 @@ function AppShell() {
     routes: AnalyzedRoute[];
     selectedRoute: AnalyzedRoute | null;
   }>({ routes: [], selectedRoute: null });
-  const [selectedRouteIdOverride, setSelectedRouteIdOverride] = useState<string | null>(null);
 
+  const [selectedRouteIdOverride, setSelectedRouteIdOverride] = useState<string | null>(null);
   const [isStartingJourney, setIsStartingJourney] = useState(false);
   const [sosModalOpen, setSosModalOpen] = useState(false);
 
-  // SafeHer AI Assistant Drawer state
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [aiDrawerMode, setAiDrawerMode] = useState<'chat' | 'voice'>('chat');
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | null>(null);
 
+  // Guest user for exploring the route planner without signing in.
+  const guestUser = useMemo(
+    () =>
+      ({
+        uid: 'safeher-guest',
+        displayName: 'Guest User',
+        email: null,
+        photoURL: null,
+        emailVerified: false,
+        isAnonymous: true,
+        providerId: 'firebase',
+        providerData: [],
+        metadata: {},
+        tenantId: null,
+        delete: async () => {},
+        getIdToken: async () => '',
+        getIdTokenResult: async () => ({}),
+        reload: async () => {},
+        toJSON: () => ({}),
+      }) as unknown as User,
+    []
+  );
+
+  const activeUser = user || (isGuest ? guestUser : null);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+
       if (currentUser) {
+        setIsGuest(false);
+
         try {
           await ensureUserProfile(currentUser);
           const roleInfo = await checkPoliceAuthorization(currentUser);
@@ -95,8 +124,10 @@ function AppShell() {
         setIsAdmin(false);
         setIsPolice(false);
       }
+
       setAuthReady(true);
     });
+
     return () => unsub();
   }, []);
 
@@ -116,6 +147,7 @@ function AppShell() {
     const unsubMyInc = subscribeMyIncidents(user.uid, setMyIncidents);
 
     let unsubPoliceInc: (() => void) | undefined;
+
     if (isPolice) {
       unsubPoliceInc = subscribeAllIncidents(setPoliceIncidents);
     }
@@ -125,21 +157,32 @@ function AppShell() {
       unsubContacts();
       unsubJourneys();
       unsubMyInc();
-      if (unsubPoliceInc) unsubPoliceInc();
+
+      if (unsubPoliceInc) {
+        unsubPoliceInc();
+      }
     };
   }, [authReady, user?.uid, isPolice]);
 
   const handleSignIn = async () => {
     setIsSigningIn(true);
     setAuthError(null);
+
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to sign in with Google.';
+      const msg =
+        err instanceof Error ? err.message : 'Unable to sign in with Google.';
       setAuthError(msg);
     } finally {
       setIsSigningIn(false);
     }
+  };
+
+  const handleContinueAsGuest = () => {
+    setIsGuest(true);
+    setActiveTab('planner');
+    setAuthError(null);
   };
 
   const handleStartLiveJourney = async (
@@ -147,8 +190,13 @@ function AppShell() {
     originLabel: string,
     destinationLabel: string
   ) => {
-    if (!user) return;
+    if (!user) {
+      setAuthError('Please sign in with Google to start a live journey.');
+      return;
+    }
+
     setIsStartingJourney(true);
+
     try {
       await createLiveJourney(user, route, originLabel, destinationLabel);
       setActiveRoute(route);
@@ -158,27 +206,35 @@ function AppShell() {
     }
   };
 
-  const handleOpenAi = useCallback((prefillPrompt?: string, mode: 'chat' | 'voice' = 'chat') => {
-    setAiDrawerMode(mode);
-    if (prefillPrompt) {
-      setPendingAiPrompt(prefillPrompt);
-    }
-    setAiDrawerOpen(true);
-  }, []);
+  const handleOpenAi = useCallback(
+    (prefillPrompt?: string, mode: 'chat' | 'voice' = 'chat') => {
+      setAiDrawerMode(mode);
+
+      if (prefillPrompt) {
+        setPendingAiPrompt(prefillPrompt);
+      }
+
+      setAiDrawerOpen(true);
+    },
+    []
+  );
 
   const activeJourney =
     myJourneys.find((j) => j.status === 'active' || j.status === 'sos') || null;
 
   const activeUserIncident =
     myIncidents.find(
-      (i) => i.status === 'active' || i.status === 'acknowledged' || i.status === 'dispatched'
+      (i) =>
+        i.status === 'active' ||
+        i.status === 'acknowledged' ||
+        i.status === 'dispatched'
     ) || null;
 
   const activeSosCount = isPolice
     ? policeIncidents.filter((i) => i.status === 'active').length
     : activeUserIncident
-    ? 1
-    : 0;
+      ? 1
+      : 0;
 
   const aiContext = useMemo(
     () =>
@@ -208,18 +264,38 @@ function AppShell() {
   const handleAiSuggestedAction = (actionType: AiActionType) => {
     switch (actionType) {
       case 'open_sos':
+        if (!user) {
+          setAuthError('Please sign in to use Emergency SOS.');
+          break;
+        }
         setSosModalOpen(true);
         break;
+
       case 'view_contacts':
+        if (!user) {
+          setAuthError('Please sign in to access your contacts.');
+          break;
+        }
         setActiveTab('journey');
         setAiDrawerOpen(false);
         break;
+
       case 'start_journey': {
         const rec =
           plannerContext.routes.find((r) => r.isRecommended) ||
           plannerContext.selectedRoute ||
           plannerContext.routes[0];
-        if (rec && plannerContext.originLabel && plannerContext.destinationLabel) {
+
+        if (!user) {
+          setAuthError('Please sign in to start a live journey.');
+          break;
+        }
+
+        if (
+          rec &&
+          plannerContext.originLabel &&
+          plannerContext.destinationLabel
+        ) {
           void handleStartLiveJourney(
             rec,
             plannerContext.originLabel,
@@ -232,15 +308,23 @@ function AppShell() {
         }
         break;
       }
+
       case 'report_hazard':
+        if (!user) {
+          setAuthError('Please sign in to report a hazard.');
+          break;
+        }
         setActiveTab('report');
         setAiDrawerOpen(false);
         break;
+
       case 'focus_recommended_route': {
         const rec = plannerContext.routes.find((r) => r.isRecommended);
+
         if (rec) {
           setSelectedRouteIdOverride(rec.id);
         }
+
         setActiveTab('planner');
         break;
       }
@@ -251,30 +335,47 @@ function AppShell() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <Header
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={(tab) => {
+          if (isGuest && tab !== 'planner') {
+            setAuthError('Please sign in with Google to access this feature.');
+            return;
+          }
+
+          setActiveTab(tab);
+        }}
         user={user}
-        onTriggerSos={() => setSosModalOpen(true)}
+        onTriggerSos={() => {
+          if (!user) {
+            setAuthError('Please sign in with Google to use Emergency SOS.');
+            return;
+          }
+
+          setSosModalOpen(true);
+        }}
         onSignIn={() => void handleSignIn()}
         activeSosCount={activeSosCount}
       />
 
       {!authReady ? (
         <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-sm text-slate-500">Initializing SafeHer workspace...</div>
+          <div className="text-sm text-slate-500">
+            Initializing SafeHer workspace...
+          </div>
         </div>
-      ) : !user ? (
+      ) : !user && !isGuest ? (
         <div className="flex-1">
           <WelcomeView
             onSignIn={() => void handleSignIn()}
+            onContinueAsGuest={handleContinueAsGuest}
             authError={authError}
             isSigningIn={isSigningIn}
           />
         </div>
       ) : (
         <div className="flex-1">
-          {activeTab === 'planner' && (
+          {activeTab === 'planner' && activeUser && (
             <RoutePlannerView
-              user={user}
+              user={activeUser}
               unsafeReports={unsafeReports}
               onStartLiveJourney={(route, orig, dest) =>
                 void handleStartLiveJourney(route, orig, dest)
@@ -286,7 +387,7 @@ function AppShell() {
             />
           )}
 
-          {activeTab === 'journey' && (
+          {activeTab === 'journey' && user && (
             <LiveJourneyView
               user={user}
               activeJourney={activeJourney}
@@ -299,7 +400,7 @@ function AppShell() {
             />
           )}
 
-          {activeTab === 'report' && (
+          {activeTab === 'report' && user && (
             <ReportHazardView
               user={user}
               unsafeReports={unsafeReports}
@@ -307,7 +408,7 @@ function AppShell() {
             />
           )}
 
-          {activeTab === 'police' && (
+          {activeTab === 'police' && user && (
             <PoliceDispatchView
               user={user}
               isPolice={isPolice}
@@ -323,12 +424,19 @@ function AppShell() {
           <span>
             SafeHer — Intelligent Women’s Route Safety &amp; Emergency Assistance
           </span>
+
           {user && (
             <div className="flex items-center gap-4">
               <span>
-                Signed in as <strong className="text-slate-700">{user.email}</strong>
-                {isAdmin ? ' · Admin Dispatcher' : isPolice ? ' · Authorized Officer' : ''}
+                Signed in as{' '}
+                <strong className="text-slate-700">{user.email}</strong>
+                {isAdmin
+                  ? ' · Admin Dispatcher'
+                  : isPolice
+                    ? ' · Authorized Officer'
+                    : ''}
               </span>
+
               <button
                 type="button"
                 onClick={() => void signOut(auth)}
@@ -338,6 +446,12 @@ function AppShell() {
                 <span>Sign Out</span>
               </button>
             </div>
+          )}
+
+          {isGuest && !user && (
+            <span className="text-teal-700 font-medium">
+              Exploring as Guest
+            </span>
           )}
         </div>
       </footer>
@@ -359,6 +473,7 @@ function AppShell() {
             onConsumePendingPrompt={() => setPendingAiPrompt(null)}
             onAction={handleAiSuggestedAction}
           />
+
           <SosModal
             isOpen={sosModalOpen}
             onClose={() => setSosModalOpen(false)}
