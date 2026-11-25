@@ -1,0 +1,527 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Publicly safe user profile without PII (emails/phones isolated in subcollections).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "User display name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["citizen", "police", "admin"],
+          "description": "Application access role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "EmergencyContact": {
+      "title": "EmergencyContact",
+      "description": "Private trusted family contact for live journey sharing and SOS alerts.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner UID"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Contact full name"
+        },
+        "relation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Family or trusted relationship"
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 24,
+          "pattern": "^[+0-9\\s\\-()]{5,24}$",
+          "description": "Emergency phone number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["ownerId", "name", "relation", "phone", "createdAt", "updatedAt"]
+    },
+    "Journey": {
+      "title": "Journey",
+      "description": "Live shared journey tracking session without private contact PII.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Traveler UID"
+        },
+        "travelerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Traveler first name or label"
+        },
+        "shareCode": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9\\-]{6,16}$",
+          "description": "Shareable tracking code matching document ID"
+        },
+        "originLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Origin address or place name"
+        },
+        "destinationLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Destination address or place name"
+        },
+        "routeName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Selected route label"
+        },
+        "safetyScore": {
+          "type": "number",
+          "description": "Calculated route safety score (0-100)"
+        },
+        "currentLat": {
+          "type": "number",
+          "description": "Current latitude"
+        },
+        "currentLng": {
+          "type": "number",
+          "description": "Current longitude"
+        },
+        "destLat": {
+          "type": "number",
+          "description": "Destination latitude"
+        },
+        "destLng": {
+          "type": "number",
+          "description": "Destination longitude"
+        },
+        "progressPct": {
+          "type": "number",
+          "description": "Journey completion percentage (0-100)"
+        },
+        "etaMinutes": {
+          "type": "number",
+          "description": "Estimated minutes remaining"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "arrived", "sos", "cancelled"],
+          "description": "Current journey state"
+        },
+        "isShared": {
+          "type": "boolean",
+          "description": "Whether family tracking lookup by shareCode is enabled"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "travelerName",
+        "shareCode",
+        "originLabel",
+        "destinationLabel",
+        "routeName",
+        "safetyScore",
+        "currentLat",
+        "currentLng",
+        "destLat",
+        "destLng",
+        "progressPct",
+        "etaMinutes",
+        "status",
+        "isShared",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EmergencyIncident": {
+      "title": "EmergencyIncident",
+      "description": "SOS emergency incident dispatched to the authorized police dashboard.",
+      "type": "object",
+      "properties": {
+        "reporterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Reporter UID"
+        },
+        "reporterName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Reporter display name"
+        },
+        "journeyId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Associated live journey ID or empty string"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["pursuit", "harassment", "poor_lighting", "stranded", "medical", "other"],
+          "description": "Emergency category"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high"],
+          "description": "Incident urgency level"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "acknowledged", "dispatched", "resolved", "cancelled_by_user"],
+          "description": "Dispatch lifecycle status"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Incident latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Incident longitude"
+        },
+        "locationLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Human-readable incident location"
+        },
+        "nearestStation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Nearest identified police facility"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "User-supplied emergency details"
+        },
+        "officerNotes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Police dispatch response notes"
+        },
+        "assignedUnit": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Assigned patrol unit identifier"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "reporterId",
+        "reporterName",
+        "journeyId",
+        "category",
+        "severity",
+        "status",
+        "lat",
+        "lng",
+        "locationLabel",
+        "nearestStation",
+        "notes",
+        "officerNotes",
+        "assignedUnit",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UnsafeReport": {
+      "title": "UnsafeReport",
+      "description": "Community-submitted report of an unsafe road stretch, broken streetlight, or blind spot.",
+      "type": "object",
+      "properties": {
+        "reporterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Reporter UID"
+        },
+        "reporterName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Reporter display name"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["no_streetlights", "isolated_area", "harassment_hotspot", "no_cctv", "unsafe_transit"],
+          "description": "Hazard type"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Risk severity"
+        },
+        "timeConcern": {
+          "type": "string",
+          "enum": ["night", "evening", "all_day"],
+          "description": "Time window when risk is highest"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "verified", "patrolled", "dismissed"],
+          "description": "Moderation and patrol status"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Hazard latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Hazard longitude"
+        },
+        "locationLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Street or landmark label"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 500,
+          "description": "Detailed safety observation"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "reporterId",
+        "reporterName",
+        "category",
+        "severity",
+        "timeConcern",
+        "status",
+        "lat",
+        "lng",
+        "locationLabel",
+        "description",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PoliceOfficer": {
+      "title": "PoliceOfficer",
+      "description": "Authorized police officer roster entry controlled strictly by admins.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Officer Firebase UID"
+        },
+        "officerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Officer full name"
+        },
+        "badgeNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9\\-]{2,32}$",
+          "description": "Police badge or precinct ID"
+        },
+        "precinct": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Assigned station or control room"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether officer credentials are active"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Authorization server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["uid", "officerName", "badgeNumber", "precinct", "active", "createdAt", "updatedAt"]
+    },
+    "OfficerRequest": {
+      "title": "OfficerRequest",
+      "description": "Access request submitted by a signed-in user to join the authorized police dispatch roster.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Requester UID"
+        },
+        "officerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Requester name"
+        },
+        "badgeNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9\\-]{2,32}$",
+          "description": "Badge identifier"
+        },
+        "precinct": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Station or precinct name"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Review status"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["uid", "officerName", "badgeNumber", "precinct", "status", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Server/admin roster marker document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Admin UID"
+        }
+      },
+      "required": ["uid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Safe user profile records keyed by Auth UID."
+    },
+    "/users/{userId}/emergency_contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/EmergencyContact" },
+      "description": "Private trusted family contacts isolated per user."
+    },
+    "/journeys/{journeyId}": {
+      "schema": { "$ref": "#/entities/Journey" },
+      "description": "Live shared journey tracking sessions keyed by shareCode."
+    },
+    "/incidents/{incidentId}": {
+      "schema": { "$ref": "#/entities/EmergencyIncident" },
+      "description": "Real-time SOS emergency incidents for authorized police dispatch."
+    },
+    "/unsafe_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/UnsafeReport" },
+      "description": "Community unsafe location reports affecting route safety scores."
+    },
+    "/police_officers/{officerId}": {
+      "schema": { "$ref": "#/entities/PoliceOfficer" },
+      "description": "Authorized police officer access roster."
+    },
+    "/officer_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/OfficerRequest" },
+      "description": "Pending officer authorization requests reviewed by admins."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Administrator access roster."
+    }
+  }
+}

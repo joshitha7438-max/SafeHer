@@ -1,0 +1,6 @@
+{
+  "name": "SafeHer",
+  "description": "Intelligent Women's Route Safety and Emergency Assistance Platform with multi-route safety scoring, live family journey sharing, and real-time police dispatch.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

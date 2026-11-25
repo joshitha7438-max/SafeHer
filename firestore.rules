@@ -1,0 +1,427 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'joshitha.7438@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isPolice() {
+      return isAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/police_officers/$(request.auth.uid))
+      );
+    }
+
+    function isValidCoord(lat, lng) {
+      return (lat is number) && (lng is number) &&
+        lat >= -90 && lat <= 90 &&
+        lng >= -180 && lng <= 180;
+    }
+
+    // --- Validation Blueprints (synchronized with firebase-blueprint.json) ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.role is string && data.role in ['citizen', 'police', 'admin'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEmergencyContact(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'relation', 'phone', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'name', 'relation', 'phone', 'createdAt', 'updatedAt']) &&
+        isValidId(data.ownerId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.relation is string && data.relation.size() >= 1 && data.relation.size() <= 40 &&
+        data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 24 &&
+        data.phone.matches('^[+0-9\\s\\-()]{5,24}$') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidJourney(data) {
+      return data.keys().hasAll([
+          'ownerId', 'travelerName', 'shareCode', 'originLabel', 'destinationLabel',
+          'routeName', 'safetyScore', 'currentLat', 'currentLng', 'destLat', 'destLng',
+          'progressPct', 'etaMinutes', 'status', 'isShared', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'travelerName', 'shareCode', 'originLabel', 'destinationLabel',
+          'routeName', 'safetyScore', 'currentLat', 'currentLng', 'destLat', 'destLng',
+          'progressPct', 'etaMinutes', 'status', 'isShared', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.travelerName is string && data.travelerName.size() >= 1 && data.travelerName.size() <= 80 &&
+        data.shareCode is string && data.shareCode.size() >= 6 && data.shareCode.size() <= 16 &&
+        data.shareCode.matches('^[A-Z0-9\\-]{6,16}$') &&
+        data.originLabel is string && data.originLabel.size() >= 1 && data.originLabel.size() <= 160 &&
+        data.destinationLabel is string && data.destinationLabel.size() >= 1 && data.destinationLabel.size() <= 160 &&
+        data.routeName is string && data.routeName.size() >= 1 && data.routeName.size() <= 80 &&
+        data.safetyScore is number && data.safetyScore >= 0 && data.safetyScore <= 100 &&
+        isValidCoord(data.currentLat, data.currentLng) &&
+        isValidCoord(data.destLat, data.destLng) &&
+        data.progressPct is number && data.progressPct >= 0 && data.progressPct <= 100 &&
+        data.etaMinutes is number && data.etaMinutes >= 0 && data.etaMinutes <= 1440 &&
+        data.status is string && data.status in ['active', 'arrived', 'sos', 'cancelled'] &&
+        data.isShared is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidIncident(data) {
+      return data.keys().hasAll([
+          'reporterId', 'reporterName', 'journeyId', 'category', 'severity', 'status',
+          'lat', 'lng', 'locationLabel', 'nearestStation', 'notes', 'officerNotes',
+          'assignedUnit', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reporterId', 'reporterName', 'journeyId', 'category', 'severity', 'status',
+          'lat', 'lng', 'locationLabel', 'nearestStation', 'notes', 'officerNotes',
+          'assignedUnit', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.reporterId) &&
+        data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 80 &&
+        data.journeyId is string && data.journeyId.size() <= 128 &&
+        (data.journeyId == '' || isValidId(data.journeyId)) &&
+        data.category is string && data.category in ['pursuit', 'harassment', 'poor_lighting', 'stranded', 'medical', 'other'] &&
+        data.severity is string && data.severity in ['critical', 'high'] &&
+        data.status is string && data.status in ['active', 'acknowledged', 'dispatched', 'resolved', 'cancelled_by_user'] &&
+        isValidCoord(data.lat, data.lng) &&
+        data.locationLabel is string && data.locationLabel.size() >= 1 && data.locationLabel.size() <= 200 &&
+        data.nearestStation is string && data.nearestStation.size() >= 1 && data.nearestStation.size() <= 160 &&
+        data.notes is string && data.notes.size() <= 500 &&
+        data.officerNotes is string && data.officerNotes.size() <= 500 &&
+        data.assignedUnit is string && data.assignedUnit.size() <= 80 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUnsafeReport(data) {
+      return data.keys().hasAll([
+          'reporterId', 'reporterName', 'category', 'severity', 'timeConcern',
+          'status', 'lat', 'lng', 'locationLabel', 'description', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reporterId', 'reporterName', 'category', 'severity', 'timeConcern',
+          'status', 'lat', 'lng', 'locationLabel', 'description', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.reporterId) &&
+        data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 80 &&
+        data.category is string && data.category in ['no_streetlights', 'isolated_area', 'harassment_hotspot', 'no_cctv', 'unsafe_transit'] &&
+        data.severity is string && data.severity in ['low', 'medium', 'high'] &&
+        data.timeConcern is string && data.timeConcern in ['night', 'evening', 'all_day'] &&
+        data.status is string && data.status in ['pending', 'verified', 'patrolled', 'dismissed'] &&
+        isValidCoord(data.lat, data.lng) &&
+        data.locationLabel is string && data.locationLabel.size() >= 1 && data.locationLabel.size() <= 200 &&
+        data.description is string && data.description.size() >= 5 && data.description.size() <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPoliceOfficer(data) {
+      return data.keys().hasAll(['uid', 'officerName', 'badgeNumber', 'precinct', 'active', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'officerName', 'badgeNumber', 'precinct', 'active', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.officerName is string && data.officerName.size() >= 1 && data.officerName.size() <= 80 &&
+        data.badgeNumber is string && data.badgeNumber.size() >= 2 && data.badgeNumber.size() <= 32 &&
+        data.badgeNumber.matches('^[A-Z0-9\\-]{2,32}$') &&
+        data.precinct is string && data.precinct.size() >= 2 && data.precinct.size() <= 100 &&
+        data.active is bool && data.active == true &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOfficerRequest(data) {
+      return data.keys().hasAll(['uid', 'officerName', 'badgeNumber', 'precinct', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'officerName', 'badgeNumber', 'precinct', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.officerName is string && data.officerName.size() >= 1 && data.officerName.size() <= 80 &&
+        data.badgeNumber is string && data.badgeNumber.size() >= 2 && data.badgeNumber.size() <= 32 &&
+        data.badgeNumber.matches('^[A-Z0-9\\-]{2,32}$') &&
+        data.precinct is string && data.precinct.size() >= 2 && data.precinct.size() <= 100 &&
+        data.status is string && data.status in ['pending', 'approved', 'rejected'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. User Profiles & Private Emergency Contacts
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        request.auth.uid == userId &&
+        incoming().uid == request.auth.uid &&
+        incoming().role == 'citizen' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']))
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+
+      match /emergency_contacts/{contactId} {
+        allow get: if isValidId(userId) && isValidId(contactId) && isOwner(userId);
+        allow list: if isOwner(userId);
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(contactId) &&
+          isOwner(userId) &&
+          isValidEmergencyContact(incoming()) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(contactId) &&
+          isOwner(userId) &&
+          isValidEmergencyContact(incoming()) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'relation', 'phone', 'updatedAt']);
+
+        allow delete: if isValidId(userId) && isValidId(contactId) && isOwner(userId);
+      }
+    }
+
+    // 2. Live Shared Journeys
+    match /journeys/{journeyId} {
+      allow get: if isSignedIn() && isValidId(journeyId) && (
+        existing().ownerId == request.auth.uid ||
+        existing().isShared == true ||
+        isPolice()
+      );
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(journeyId) &&
+        isValidJourney(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().shareCode == journeyId &&
+        incoming().status == 'active' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(journeyId) &&
+        isValidJourney(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().shareCode == existing().shareCode &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (!(existing().status in ['arrived', 'cancelled']) || isAdmin()) && (
+          isAdmin() ||
+          (existing().ownerId == request.auth.uid && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['currentLat', 'currentLng', 'progressPct', 'etaMinutes', 'updatedAt'])) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['isShared', 'updatedAt'])) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'currentLat', 'currentLng', 'progressPct', 'etaMinutes', 'updatedAt']) &&
+             incoming().status in ['active', 'arrived', 'sos', 'cancelled'])
+          ))
+        );
+
+      allow delete: if isValidId(journeyId) && (
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isAdmin()
+      );
+    }
+
+    // 3. Emergency SOS Incidents
+    match /incidents/{incidentId} {
+      allow get: if isSignedIn() && isValidId(incidentId) && (
+        existing().reporterId == request.auth.uid ||
+        isPolice()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.reporterId == request.auth.uid ||
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/police_officers/$(request.auth.uid))
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(incidentId) &&
+        isValidIncident(incoming()) &&
+        incoming().reporterId == request.auth.uid &&
+        incoming().status == 'active' &&
+        incoming().officerNotes == '' &&
+        incoming().assignedUnit == '' &&
+        (incoming().journeyId == '' || exists(/databases/$(database)/documents/journeys/$(incoming().journeyId))) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(incidentId) &&
+        isValidIncident(incoming()) &&
+        incoming().reporterId == existing().reporterId &&
+        incoming().journeyId == existing().journeyId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (!(existing().status in ['resolved', 'cancelled_by_user']) || isAdmin()) && (
+          isAdmin() ||
+          (isPolice() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'officerNotes', 'assignedUnit', 'updatedAt']) &&
+            incoming().status in ['active', 'acknowledged', 'dispatched', 'resolved']) ||
+          (existing().reporterId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'updatedAt'])) ||
+          (existing().reporterId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']) &&
+            incoming().status == 'cancelled_by_user')
+        );
+
+      allow delete: if isAdmin() && isValidId(incidentId);
+    }
+
+    // 4. Community Unsafe Location Reports
+    match /unsafe_reports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) && (
+        existing().status in ['pending', 'verified', 'patrolled'] ||
+        existing().reporterId == request.auth.uid ||
+        isPolice()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.status in ['pending', 'verified', 'patrolled'] ||
+        resource.data.reporterId == request.auth.uid ||
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/police_officers/$(request.auth.uid))
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(reportId) &&
+        isValidUnsafeReport(incoming()) &&
+        incoming().reporterId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(reportId) &&
+        isValidUnsafeReport(incoming()) &&
+        incoming().reporterId == existing().reporterId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (isPolice() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'severity', 'updatedAt'])) ||
+          (existing().reporterId == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['description', 'severity', 'timeConcern', 'updatedAt']))
+        );
+
+      allow delete: if isValidId(reportId) && (
+        (isSignedIn() && existing().reporterId == request.auth.uid) ||
+        isAdmin()
+      );
+    }
+
+    // 5. Authorized Police Officer Roster
+    match /police_officers/{officerId} {
+      allow get: if isValidId(officerId) && (isOwner(officerId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isAdmin() &&
+        isValidId(officerId) &&
+        isValidPoliceOfficer(incoming()) &&
+        incoming().uid == officerId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(officerId) &&
+        isValidPoliceOfficer(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['officerName', 'badgeNumber', 'precinct', 'active', 'updatedAt']);
+
+      allow delete: if isAdmin() && isValidId(officerId);
+    }
+
+    // 6. Officer Access Requests
+    match /officer_requests/{requestId} {
+      allow get: if isValidId(requestId) && (isOwner(requestId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        request.auth.uid == requestId &&
+        isValidOfficerRequest(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidId(requestId) &&
+        isValidOfficerRequest(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isValidId(requestId) && (isOwner(requestId) || isAdmin());
+    }
+
+    // 7. Admin Roster
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+  }
+}
