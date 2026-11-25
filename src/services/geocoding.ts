@@ -1,3 +1,4 @@
+
 import { GeoPlace } from '../types/safeher';
 
 export interface CuratedCorridor {
@@ -79,57 +80,179 @@ export const CURATED_CORRIDORS: CuratedCorridor[] = [
   },
 ];
 
-interface NominatimItem {
-  display_name: string;
-  lat: string;
-  lon: string;
-  name?: string;
+interface PhotonFeature {
+  type: 'Feature';
+  geometry: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  properties: {
+    name?: string;
+    street?: string;
+    housenumber?: string;
+    district?: string;
+    locality?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    postcode?: string;
+  };
 }
 
-export async function searchPlaces(queryText: string): Promise<GeoPlace[]> {
+interface PhotonResponse {
+  features: PhotonFeature[];
+}
+
+function createPlace(feature: PhotonFeature): GeoPlace {
+  const properties = feature.properties;
+  const [lng, lat] = feature.geometry.coordinates;
+
+  const streetAddress = [
+    properties.housenumber,
+    properties.street,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const locationParts = [
+    properties.name,
+    streetAddress,
+    properties.locality,
+    properties.district,
+    properties.city,
+    properties.county,
+    properties.state,
+    properties.country,
+    properties.postcode,
+  ].filter(Boolean);
+
+  const uniqueParts = [...new Set(locationParts)];
+
+  const label = uniqueParts.join(', ');
+
+  const shortName =
+    properties.name ||
+    streetAddress ||
+    properties.locality ||
+    properties.district ||
+    properties.city ||
+    label;
+
+  return {
+    label: label || 'Unknown location',
+    shortName: shortName || 'Unknown location',
+    lat,
+    lng,
+  };
+}
+
+export async function searchPlaces(
+  queryText: string
+): Promise<GeoPlace[]> {
   const trimmed = queryText.trim();
-  if (trimmed.length < 2) return [];
 
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=1&q=${encodeURIComponent(
-    trimmed
-  )}`;
+  if (trimmed.length < 2) {
+    return [];
+  }
 
-  const res = await fetch(url, {
+  const params = new URLSearchParams({
+    q: trimmed,
+    limit: '10',
+    lang: 'en',
+  });
+
+  const url = `https://photon.komoot.io/api/?${params.toString()}`;
+
+  const response = await fetch(url, {
     headers: {
       Accept: 'application/json',
     },
   });
 
-  if (!res.ok) {
-    throw new Error(`Location lookup returned status ${res.status}`);
+  if (!response.ok) {
+    throw new Error(
+      `Location search failed with status ${response.status}`
+    );
   }
 
-  const data = (await res.json()) as NominatimItem[];
-  return data.map((item) => {
-    const parts = item.display_name.split(',').map((s) => s.trim());
-    const shortName = item.name || parts.slice(0, 2).join(', ');
-    return {
-      label: item.display_name,
-      shortName,
-      lat: parseFloat(item.lat),
-      lng: parseFloat(item.lon),
-    };
-  });
+  const data = (await response.json()) as PhotonResponse;
+
+  if (!data.features || !Array.isArray(data.features)) {
+    return [];
+  }
+
+  const places = data.features
+    .filter((feature) => {
+      const coordinates = feature.geometry?.coordinates;
+
+      return (
+        Array.isArray(coordinates) &&
+        coordinates.length >= 2 &&
+        Number.isFinite(coordinates[0]) &&
+        Number.isFinite(coordinates[1])
+      );
+    })
+    .map(createPlace);
+
+  // Remove duplicate coordinates.
+  const uniquePlaces = new Map<string, GeoPlace>();
+
+  for (const place of places) {
+    const key = `${place.lat.toFixed(5)}-${place.lng.toFixed(5)}`;
+
+    if (!uniquePlaces.has(key)) {
+      uniquePlaces.set(key, place);
+    }
+  }
+
+  return Array.from(uniquePlaces.values());
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<GeoPlace> {
+export async function reverseGeocode(
+  lat: number,
+  lng: number
+): Promise<GeoPlace> {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lon: String(lng),
+      lang: 'en',
     });
-    if (!res.ok) throw new Error('Reverse geocode error');
-    const data = (await res.json()) as { display_name?: string; name?: string };
-    const full = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    const shortName = data.name || full.split(',').slice(0, 2).join(', ');
-    return { label: full, shortName, lat, lng };
+
+    const url = `https://photon.komoot.io/reverse?${params.toString()}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Reverse geocoding failed');
+    }
+
+    const data = (await response.json()) as PhotonResponse;
+
+    if (data.features && data.features.length > 0) {
+      const place = createPlace(data.features[0]);
+
+      return {
+        ...place,
+        lat,
+        lng,
+      };
+    }
+
+    throw new Error('No address found');
   } catch {
     const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    return { label: fallback, shortName: fallback, lat, lng };
+
+    return {
+      label: fallback,
+      shortName: fallback,
+      lat,
+      lng,
+    };
   }
 }
